@@ -1,0 +1,78 @@
+export const schemaSql = `
+CREATE TABLE IF NOT EXISTS repos (
+  id TEXT PRIMARY KEY,
+  remote_url TEXT NOT NULL UNIQUE,
+  repo_name TEXT NOT NULL,
+  default_branch TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS graph_scopes (
+  id TEXT PRIMARY KEY,
+  repo_id TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  parent_scope_id TEXT REFERENCES graph_scopes(id) ON DELETE SET NULL,
+  ref TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(repo_id, kind, name)
+);
+
+CREATE TABLE IF NOT EXISTS memory_commits (
+  id TEXT PRIMARY KEY,
+  scope_id TEXT NOT NULL REFERENCES graph_scopes(id) ON DELETE CASCADE,
+  parent_memory_commit_id TEXT REFERENCES memory_commits(id) ON DELETE SET NULL,
+  git_commit_sha TEXT,
+  title TEXT NOT NULL,
+  summary TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS components (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  code_anchor TEXT
+);
+
+CREATE TABLE IF NOT EXISTS flows (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS claims (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  truth TEXT NOT NULL,
+  intent TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sources (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  ref TEXT NOT NULL,
+  title TEXT
+);
+
+CREATE TABLE IF NOT EXISTS edges (
+  id TEXT PRIMARY KEY,
+  from_id TEXT NOT NULL,
+  from_type TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  to_type TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  metadata TEXT
+);
+
+CREATE TABLE IF NOT EXISTS graph_memberships (
+  scope_id TEXT NOT NULL REFERENCES graph_scopes(id) ON DELETE CASCADE,
+  subject_type TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  memory_commit_id TEXT NOT NULL REFERENCES memory_commits(id) ON DELETE CASCADE,
+  PRIMARY KEY(scope_id, subject_type, subject_id)
+);
+
+CREATE INDEX IF NOT EXISTS graph_scopes_repo_idx ON graph_scopes(repo_id);
+CREATE INDEX IF NOT EXISTS memory_commits_scope_idx ON memory_commits(scope_id);
+CREATE INDEX IF NOT EXISTS graph_memberships_scope_idx ON graph_memberships(scope_id);
+CREATE INDEX IF NOT EXISTS graph_memberships_subject_idx ON graph_memberships(subject_type, subject_id);
+`;

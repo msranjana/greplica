@@ -1,0 +1,198 @@
+import { isAllowedEdge } from "./edge.js";
+import type { EdgeKind } from "./edge.js";
+import type { MemoryCommitProposal, ProposalSubject } from "./proposal.js";
+import type { GraphObjectType } from "./schema.js";
+
+const claimKinds = new Set(["fact", "requirement", "decision", "task", "question", "risk"]);
+const claimTruths = new Set(["code_verified", "source_verified", "unknown"]);
+const claimIntents = new Set(["intended", "accidental", "unknown"]);
+const sourceKinds = new Set(["session", "prd", "doc", "issue", "pr", "artifact", "code"]);
+const edgeKinds = new Set(["about", "contains", "touches", "supersedes", "evidenced_by"]);
+const graphObjectTypes = new Set(["component", "flow", "claim", "edge", "source"]);
+
+export interface ExistingSubjectLookup {
+  subjectExists(type: GraphObjectType, id: string): boolean;
+}
+
+export interface ProposalValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+export function validateProposal(
+  proposal: unknown,
+  existingSubjects?: ExistingSubjectLookup,
+): ProposalValidationResult {
+  const errors: string[] = [];
+
+  if (!isRecord(proposal)) {
+    return { valid: false, errors: ["Proposal must be an object."] };
+  }
+
+  if (!isNonEmptyString(proposal.title)) {
+    errors.push("Proposal title must be a non-empty string.");
+  }
+
+  if (proposal.summary !== undefined && typeof proposal.summary !== "string") {
+    errors.push("Proposal summary must be a string when present.");
+  }
+
+  if (!isRecord(proposal.creates)) {
+    errors.push("Proposal creates must be an object.");
+    return { valid: false, errors };
+  }
+
+  const typedProposal = proposal as Partial<MemoryCommitProposal>;
+  const creates = typedProposal.creates ?? {};
+  const ids = new Map<string, ProposalSubject>();
+  const components = arrayField(creates, "components", errors);
+  const flows = arrayField(creates, "flows", errors);
+  const claims = arrayField(creates, "claims", errors);
+  const sources = arrayField(creates, "sources", errors);
+  const edges = arrayField(creates, "edges", errors);
+
+  for (const component of components) {
+    if (!isRecord(component)) {
+      errors.push("Every component must be an object.");
+      continue;
+    }
+    validateSubjectBase("component", component.id, ids, existingSubjects, errors);
+    if (!isNonEmptyString(component.name)) errors.push(`Component ${stringId(component.id)} needs a name.`);
+    if (component.code_anchor !== undefined && typeof component.code_anchor !== "string") {
+      errors.push(`Component ${stringId(component.id)} code_anchor must be a string when present.`);
+    }
+  }
+
+  for (const flow of flows) {
+    if (!isRecord(flow)) {
+      errors.push("Every flow must be an object.");
+      continue;
+    }
+    validateSubjectBase("flow", flow.id, ids, existingSubjects, errors);
+    if (!isNonEmptyString(flow.name)) errors.push(`Flow ${stringId(flow.id)} needs a name.`);
+  }
+
+  for (const claim of claims) {
+    if (!isRecord(claim)) {
+      errors.push("Every claim must be an object.");
+      continue;
+    }
+    validateSubjectBase("claim", claim.id, ids, existingSubjects, errors);
+    if (!claimKinds.has(String(claim.kind))) errors.push(`Claim ${stringId(claim.id)} has invalid kind.`);
+    if (!isNonEmptyString(claim.text)) errors.push(`Claim ${stringId(claim.id)} needs text.`);
+    if (!claimTruths.has(String(claim.truth))) errors.push(`Claim ${stringId(claim.id)} has invalid truth.`);
+    if (!claimIntents.has(String(claim.intent))) errors.push(`Claim ${stringId(claim.id)} has invalid intent.`);
+  }
+
+  for (const source of sources) {
+    if (!isRecord(source)) {
+      errors.push("Every source must be an object.");
+      continue;
+    }
+    validateSubjectBase("source", source.id, ids, existingSubjects, errors);
+    if (!sourceKinds.has(String(source.kind))) errors.push(`Source ${stringId(source.id)} has invalid kind.`);
+    if (!isNonEmptyString(source.ref)) errors.push(`Source ${stringId(source.id)} needs ref.`);
+    if (source.title !== undefined && typeof source.title !== "string") {
+      errors.push(`Source ${stringId(source.id)} title must be a string when present.`);
+    }
+  }
+
+  for (const edge of edges) {
+    if (!isRecord(edge)) {
+      errors.push("Every edge must be an object.");
+      continue;
+    }
+
+    validateSubjectBase("edge", edge.id, ids, existingSubjects, errors);
+
+    const fromType = String(edge.from_type) as GraphObjectType;
+    const toType = String(edge.to_type) as GraphObjectType;
+    const kind = String(edge.kind) as EdgeKind;
+
+    if (!graphObjectTypes.has(fromType)) errors.push(`Edge ${stringId(edge.id)} has invalid from_type.`);
+    if (!graphObjectTypes.has(toType)) errors.push(`Edge ${stringId(edge.id)} has invalid to_type.`);
+    if (!edgeKinds.has(kind)) errors.push(`Edge ${stringId(edge.id)} has invalid kind.`);
+
+    if (graphObjectTypes.has(fromType) && !subjectRefExists(fromType, String(edge.from_id), ids, existingSubjects)) {
+      errors.push(`Edge ${stringId(edge.id)} references missing from subject ${fromType}:${String(edge.from_id)}.`);
+    }
+
+    if (graphObjectTypes.has(toType) && !subjectRefExists(toType, String(edge.to_id), ids, existingSubjects)) {
+      errors.push(`Edge ${stringId(edge.id)} references missing to subject ${toType}:${String(edge.to_id)}.`);
+    }
+
+    if (
+      graphObjectTypes.has(fromType) &&
+      graphObjectTypes.has(toType) &&
+      edgeKinds.has(kind) &&
+      !isAllowedEdge({ from_type: fromType, to_type: toType, kind })
+    ) {
+      errors.push(`Edge ${stringId(edge.id)} has invalid direction for ${kind}.`);
+    }
+
+    if (edge.metadata !== undefined && !isRecord(edge.metadata)) {
+      errors.push(`Edge ${stringId(edge.id)} metadata must be an object when present.`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+function validateSubjectBase(
+  type: GraphObjectType,
+  id: unknown,
+  ids: Map<string, ProposalSubject>,
+  existingSubjects: ExistingSubjectLookup | undefined,
+  errors: string[],
+): void {
+  if (!isNonEmptyString(id)) {
+    errors.push(`${type} must have a non-empty id.`);
+    return;
+  }
+
+  const key = subjectKey(type, id);
+  if (ids.has(key)) {
+    errors.push(`Duplicate id ${key} in proposal.`);
+  }
+
+  ids.set(key, { type, id });
+
+  if (existingSubjects?.subjectExists(type, id)) {
+    errors.push(`${key} already exists.`);
+  }
+}
+
+function subjectRefExists(
+  type: GraphObjectType,
+  id: string,
+  ids: Map<string, ProposalSubject>,
+  existingSubjects: ExistingSubjectLookup | undefined,
+): boolean {
+  return ids.has(subjectKey(type, id)) || existingSubjects?.subjectExists(type, id) === true;
+}
+
+function subjectKey(type: GraphObjectType, id: string): string {
+  return `${type}:${id}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function arrayField(source: object, key: string, errors: string[]): unknown[] {
+  const value = (source as Record<string, unknown>)[key];
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    errors.push(`creates.${key} must be an array when present.`);
+    return [];
+  }
+  return value;
+}
+
+function stringId(value: unknown): string {
+  return typeof value === "string" && value.length > 0 ? value : "<missing>";
+}

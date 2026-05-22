@@ -1,6 +1,6 @@
-import type { GraphScopeId, MemoryCommitId, SubjectType } from "./schema.js";
+import type { GraphScopeId, MembershipSubjectType, MemoryCommitId } from "./schema.js";
 
-export type GraphScopeKind = "main" | "branch" | "session" | "source";
+export type GraphScopeKind = "main" | "working" | "branch" | "session" | "source";
 
 export interface GraphScope {
   id: GraphScopeId;
@@ -13,7 +13,7 @@ export interface GraphScope {
 
 export interface GraphMembership {
   scope_id: GraphScopeId;
-  subject_type: SubjectType;
+  subject_type: MembershipSubjectType;
   subject_id: string;
-  memory_commit_id?: MemoryCommitId;
+  memory_commit_id: MemoryCommitId;
 }

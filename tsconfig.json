@@ -5,8 +5,9 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "noEmit": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["libs/**/*.ts"]
+  "include": ["apps/**/*.ts", "libs/**/*.ts"]
 }

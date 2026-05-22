@@ -1,4 +1,4 @@
-import type { EdgeId, SubjectType } from "./schema.js";
+import type { EdgeId, GraphObjectType } from "./schema.js";
 
 export type EdgeKind =
   | "about"
@@ -12,9 +12,9 @@ export type EdgeMetadata = Record<string, unknown>;
 export interface Edge {
   id: EdgeId;
   from_id: string;
-  from_type: SubjectType;
+  from_type: GraphObjectType;
   to_id: string;
-  to_type: SubjectType;
+  to_type: GraphObjectType;
   kind: EdgeKind;
   metadata?: EdgeMetadata;
 }

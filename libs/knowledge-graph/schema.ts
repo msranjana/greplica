@@ -7,7 +7,9 @@ export type ClaimId = string;
 export type EdgeId = string;
 export type SourceId = string;
 
-export type SubjectType = "component" | "flow" | "claim" | "edge" | "source";
+export type GraphObjectType = "component" | "flow" | "claim" | "edge" | "source";
+
+export type MembershipSubjectType = "component" | "flow" | "claim" | "edge";
 
 export type SubjectIdByType = {
   component: ComponentId;
