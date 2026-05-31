@@ -71,8 +71,20 @@ CREATE TABLE IF NOT EXISTS graph_memberships (
   PRIMARY KEY(scope_id, subject_type, subject_id)
 );
 
+CREATE TABLE IF NOT EXISTS claim_embeddings (
+  repo_id TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+  claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dimensions INTEGER NOT NULL,
+  embedding BLOB NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(repo_id, claim_id, provider, model, dimensions)
+);
+
 CREATE INDEX IF NOT EXISTS graph_scopes_repo_idx ON graph_scopes(repo_id);
 CREATE INDEX IF NOT EXISTS memory_commits_scope_idx ON memory_commits(scope_id);
 CREATE INDEX IF NOT EXISTS graph_memberships_scope_idx ON graph_memberships(scope_id);
 CREATE INDEX IF NOT EXISTS graph_memberships_subject_idx ON graph_memberships(subject_type, subject_id);
+CREATE INDEX IF NOT EXISTS claim_embeddings_repo_idx ON claim_embeddings(repo_id);
 `;

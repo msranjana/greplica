@@ -3,9 +3,14 @@ import { validateProposal, type ProposalValidationResult } from "./validate-prop
 import type { Claim } from "./claim.js";
 import type { Edge } from "./edge.js";
 import type { Component, Flow, Source } from "./schema.js";
+import { GraphContextBuilder } from "./graph-context/context-builder.js";
+import type { EmbeddingStatus, GraphContextResult } from "./graph-context/types.js";
+import { loadLocalEnv } from "../env/load-local-env.js";
 import { defaultDatabasePath, openDatabase } from "../storage/sqlite/db.js";
 import type { SqliteRepository } from "../storage/sqlite/repository.js";
 import { SqliteRepository as SqliteKnowledgeGraphRepository } from "../storage/sqlite/repository.js";
+
+export type { GraphContextResult } from "./graph-context/types.js";
 
 export interface RepoRef {
   remote_url: string;
@@ -29,16 +34,10 @@ export interface GraphReadResult {
   edges: Edge[];
 }
 
-export interface GraphSearchResult {
-  type: string;
-  id: string;
-  label: string;
-  text: string;
-}
-
 export interface ApplyProposalResult {
   memory_commit_id: string;
   scope_id: string;
+  embedding_status: EmbeddingStatus;
   created: {
     components: number;
     flows: number;
@@ -49,7 +48,10 @@ export interface ApplyProposalResult {
 }
 
 export class KnowledgeGraphService {
-  constructor(private readonly repository: SqliteRepository) {}
+  constructor(
+    private readonly repository: SqliteRepository,
+    private readonly contextBuilder = new GraphContextBuilder(repository),
+  ) {}
 
   initRepo(input: RepoRef): InitRepoResult {
     const { repo, created } = this.repository.upsertRepo(input);
@@ -81,9 +83,11 @@ export class KnowledgeGraphService {
     return this.repository.readGraphView(repo.id);
   }
 
-  searchGraph(input: RepoRef, query: string): GraphSearchResult[] {
+  async contextGraph(input: RepoRef, query: string): Promise<GraphContextResult> {
     const repo = this.repository.requireRepo(input.remote_url);
-    return this.repository.searchGraphView(repo.id, query);
+    return this.contextBuilder.build(repo.id, this.repository.readGraphView(repo.id), query, {
+      warnOnCreatedEmbeddings: true,
+    });
   }
 
   validateProposal(input: RepoRef, proposal: unknown): ProposalValidationResult {
@@ -91,7 +95,7 @@ export class KnowledgeGraphService {
     return validateProposal(normalizeProposal(proposal, this.repository), this.repository);
   }
 
-  applyProposal(input: RepoRef, proposal: unknown): ApplyProposalResult {
+  async applyProposal(input: RepoRef, proposal: unknown): Promise<ApplyProposalResult> {
     const normalizedProposal = normalizeProposal(proposal, this.repository);
     const validation = this.validateProposal(input, normalizedProposal);
     if (!validation.valid) {
@@ -107,10 +111,12 @@ export class KnowledgeGraphService {
     });
 
     this.repository.createProposalRecords(working.id, memoryCommit.id, normalizedProposal);
+    const embeddingStatus = await this.contextBuilder.ensureForGraph(repo.id, this.repository.readGraphView(repo.id));
 
     return {
       memory_commit_id: memoryCommit.id,
       scope_id: working.id,
+      embedding_status: embeddingStatus,
       created: {
         components: normalizedProposal.creates.components?.length ?? 0,
         flows: normalizedProposal.creates.flows?.length ?? 0,
@@ -127,5 +133,6 @@ export class KnowledgeGraphService {
 }
 
 export function createLocalKnowledgeGraphService(): KnowledgeGraphService {
+  loadLocalEnv();
   return new KnowledgeGraphService(new SqliteKnowledgeGraphRepository(openDatabase()));
 }

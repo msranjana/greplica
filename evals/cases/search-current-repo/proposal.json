@@ -1,0 +1,901 @@
+{
+  "title": "Deep search benchmark memory fixture",
+  "summary": "Synthetic deep graph memory for evaluating search retrieval over the current engineering-context repo. This fixture is intentionally richer than bootstrap memory and is not a model for shallow bootstrap output.",
+  "creates": {
+    "components": [
+      {
+        "id": "component.cli_app",
+        "name": "Engineering Context CLI",
+        "code_anchor": "apps/cli/main.ts"
+      },
+      {
+        "id": "component.cli_init_command",
+        "name": "CLI init command",
+        "code_anchor": "apps/cli/main.ts"
+      },
+      {
+        "id": "component.cli_graph_read_command",
+        "name": "CLI graph read command",
+        "code_anchor": "apps/cli/main.ts"
+      },
+      {
+        "id": "component.cli_graph_context_command",
+        "name": "CLI graph context command",
+        "code_anchor": "apps/cli/main.ts"
+      },
+      {
+        "id": "component.cli_proposal_commands",
+        "name": "CLI proposal validate and apply commands",
+        "code_anchor": "apps/cli/main.ts"
+      },
+      {
+        "id": "component.repo_context_detection",
+        "name": "Repo context detection",
+        "code_anchor": "apps/cli/repo-context.ts"
+      },
+      {
+        "id": "component.knowledge_graph_service",
+        "name": "KnowledgeGraphService boundary",
+        "code_anchor": "libs/knowledge-graph/service.ts"
+      },
+      {
+        "id": "component.proposal_model",
+        "name": "Proposal model and compact syntax",
+        "code_anchor": "libs/knowledge-graph/proposal.ts"
+      },
+      {
+        "id": "component.proposal_normalization",
+        "name": "Proposal normalization",
+        "code_anchor": "libs/knowledge-graph/proposal.ts"
+      },
+      {
+        "id": "component.proposal_validation",
+        "name": "Proposal validation",
+        "code_anchor": "libs/knowledge-graph/validate-proposal.ts"
+      },
+      {
+        "id": "component.edge_rules",
+        "name": "Edge direction rules",
+        "code_anchor": "libs/knowledge-graph/edge.ts"
+      },
+      {
+        "id": "component.graph_schema",
+        "name": "Graph schema and object types",
+        "code_anchor": "libs/knowledge-graph/schema.ts, libs/knowledge-graph/claim.ts, libs/knowledge-graph/scope.ts, libs/knowledge-graph/commit.ts"
+      },
+      {
+        "id": "component.scope_model",
+        "name": "Graph scope and membership model",
+        "code_anchor": "libs/knowledge-graph/scope.ts"
+      },
+      {
+        "id": "component.memory_commit_model",
+        "name": "Memory commit model",
+        "code_anchor": "libs/knowledge-graph/commit.ts"
+      },
+      {
+        "id": "component.sqlite_database",
+        "name": "SQLite database opener and migrations",
+        "code_anchor": "libs/storage/sqlite/db.ts, libs/storage/sqlite/migrate.ts"
+      },
+      {
+        "id": "component.sqlite_schema",
+        "name": "SQLite schema",
+        "code_anchor": "libs/storage/sqlite/schema.ts"
+      },
+      {
+        "id": "component.sqlite_repository",
+        "name": "SQLite repository",
+        "code_anchor": "libs/storage/sqlite/repository.ts"
+      },
+      {
+        "id": "component.active_graph_view",
+        "name": "Active graph view composition",
+        "code_anchor": "libs/storage/sqlite/repository.ts"
+      },
+      {
+        "id": "component.graph_context_retrieval",
+        "name": "Graph context retrieval implementation",
+        "code_anchor": "libs/knowledge-graph/graph-context"
+      },
+      {
+        "id": "component.agent_runner_codex",
+        "name": "Codex agent runner",
+        "code_anchor": "libs/agent-runner/codex.ts"
+      },
+      {
+        "id": "component.agent_runner_metrics",
+        "name": "Agent runner metrics",
+        "code_anchor": "libs/agent-runner/metrics.ts"
+      },
+      {
+        "id": "component.bootstrap_eval_runner",
+        "name": "Bootstrap eval runner",
+        "code_anchor": "evals/cases/bootstrap-current-repo-at-1872222/run.ts"
+      },
+      {
+        "id": "component.bootstrap_eval_rubric",
+        "name": "Bootstrap eval rubric",
+        "code_anchor": "evals/cases/bootstrap-current-repo-at-1872222/rubric.json"
+      },
+      {
+        "id": "component.engineering_memory_skill",
+        "name": "Engineering memory skill",
+        "code_anchor": "skills/engineering-memory/SKILL.md"
+      },
+      {
+        "id": "component.package_scripts",
+        "name": "Package scripts and build configuration",
+        "code_anchor": "package.json, tsconfig.json, tsconfig.build.json"
+      },
+      {
+        "id": "component.search_eval_fixture",
+        "name": "Search eval synthetic fixture",
+        "code_anchor": "evals/cases/search-current-repo/proposal.json"
+      }
+    ],
+    "flows": [
+      {
+        "id": "flow.cli_command_dispatch",
+        "name": "CLI command dispatch routes argv to service operations",
+        "touches": [
+          "component.cli_app",
+          "component.cli_init_command",
+          "component.cli_graph_read_command",
+          "component.cli_graph_context_command",
+          "component.cli_proposal_commands",
+          "component.knowledge_graph_service",
+          "component.repo_context_detection"
+        ]
+      },
+      {
+        "id": "flow.repo_context_detection",
+        "name": "Detect repo root, remote URL, repo name, and default branch from Git",
+        "touches": [
+          "component.repo_context_detection",
+          "component.cli_app"
+        ]
+      },
+      {
+        "id": "flow.repo_initialization",
+        "name": "Initialize repo memory with main and working scopes",
+        "touches": [
+          "component.cli_init_command",
+          "component.repo_context_detection",
+          "component.knowledge_graph_service",
+          "component.sqlite_repository",
+          "component.scope_model"
+        ]
+      },
+      {
+        "id": "flow.graph_read",
+        "name": "Read current graph view for main plus working scopes",
+        "touches": [
+          "component.cli_graph_read_command",
+          "component.knowledge_graph_service",
+          "component.sqlite_repository",
+          "component.active_graph_view"
+        ]
+      },
+      {
+        "id": "flow.graph_context",
+        "name": "Build a graph context bundle for a natural-language query",
+        "touches": [
+          "component.cli_graph_context_command",
+          "component.knowledge_graph_service",
+          "component.sqlite_repository",
+          "component.graph_context_retrieval",
+          "component.active_graph_view"
+        ]
+      },
+      {
+        "id": "flow.proposal_validation",
+        "name": "Normalize and validate proposal structure before apply",
+        "touches": [
+          "component.cli_proposal_commands",
+          "component.knowledge_graph_service",
+          "component.proposal_model",
+          "component.proposal_normalization",
+          "component.proposal_validation",
+          "component.edge_rules"
+        ]
+      },
+      {
+        "id": "flow.proposal_apply",
+        "name": "Apply valid proposal into the working scope as a memory commit",
+        "touches": [
+          "component.cli_proposal_commands",
+          "component.knowledge_graph_service",
+          "component.proposal_normalization",
+          "component.proposal_validation",
+          "component.sqlite_repository",
+          "component.memory_commit_model",
+          "component.scope_model"
+        ]
+      },
+      {
+        "id": "flow.compact_relationships_to_edges",
+        "name": "Convert compact relationship fields into canonical graph edges",
+        "touches": [
+          "component.proposal_model",
+          "component.proposal_normalization",
+          "component.edge_rules",
+          "component.graph_schema"
+        ]
+      },
+      {
+        "id": "flow.edge_validation",
+        "name": "Validate graph edge endpoint existence and allowed direction",
+        "touches": [
+          "component.proposal_validation",
+          "component.edge_rules",
+          "component.graph_schema"
+        ]
+      },
+      {
+        "id": "flow.active_graph_view",
+        "name": "Compose active graph records from current scopes and filter edge endpoints",
+        "touches": [
+          "component.sqlite_repository",
+          "component.active_graph_view",
+          "component.scope_model",
+          "component.graph_schema"
+        ]
+      },
+      {
+        "id": "flow.sqlite_persistence",
+        "name": "Persist graph objects, edges, memberships, scopes, and commits in SQLite",
+        "touches": [
+          "component.sqlite_database",
+          "component.sqlite_schema",
+          "component.sqlite_repository",
+          "component.scope_model",
+          "component.memory_commit_model"
+        ]
+      },
+      {
+        "id": "flow.bootstrap_eval_generation",
+        "name": "Bootstrap eval obtains a proposal from a fixture or Codex agent",
+        "touches": [
+          "component.bootstrap_eval_runner",
+          "component.agent_runner_codex",
+          "component.engineering_memory_skill"
+        ]
+      },
+      {
+        "id": "flow.bootstrap_eval_judging",
+        "name": "Bootstrap eval judges proposal coverage and quality with rubric-driven scoring",
+        "touches": [
+          "component.bootstrap_eval_runner",
+          "component.bootstrap_eval_rubric",
+          "component.agent_runner_metrics"
+        ]
+      },
+      {
+        "id": "flow.engineering_memory_bootstrap",
+        "name": "Engineering memory skill guides shallow repo inspection and validated proposal creation",
+        "touches": [
+          "component.engineering_memory_skill",
+          "component.cli_app",
+          "component.cli_graph_read_command",
+          "component.cli_proposal_commands"
+        ]
+      },
+      {
+        "id": "flow.local_database_isolation",
+        "name": "ENGINEERING_CONTEXT_HOME isolates local SQLite database state",
+        "touches": [
+          "component.sqlite_database",
+          "component.bootstrap_eval_runner",
+          "component.search_eval_fixture"
+        ]
+      },
+      {
+        "id": "flow.search_eval_retrieval",
+        "name": "Search eval seeds a deep graph fixture and scores task-sentence retrieval",
+        "touches": [
+          "component.search_eval_fixture",
+          "component.cli_graph_context_command",
+          "component.graph_context_retrieval",
+          "component.active_graph_view"
+        ]
+      }
+    ],
+    "claims": [
+      {
+        "id": "claim.cli_is_thin_service_wrapper",
+        "kind": "fact",
+        "text": "The CLI is a thin local wrapper that parses argv, detects repository context, reads proposal files, prints command output, and delegates graph behavior to KnowledgeGraphService.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.cli_app",
+          "flow.cli_command_dispatch"
+        ]
+      },
+      {
+        "id": "claim.cli_constructs_service_once",
+        "kind": "fact",
+        "text": "The CLI constructs a local KnowledgeGraphService once at startup before routing commands.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.cli_app",
+          "component.knowledge_graph_service"
+        ]
+      },
+      {
+        "id": "claim.init_prints_repo_scope_database",
+        "kind": "fact",
+        "text": "The init command prints repo name, remote URL, default branch, database path, main scope ID, and working scope ID.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.cli_init_command",
+          "flow.repo_initialization"
+        ]
+      },
+      {
+        "id": "claim.graph_read_prints_all_sections",
+        "kind": "fact",
+        "text": "The graph read command prints components, flows, claims, and edges from the current graph view.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.cli_graph_read_command",
+          "flow.graph_read"
+        ]
+      },
+      {
+        "id": "claim.graph_context_requires_query",
+        "kind": "fact",
+        "text": "The graph context command requires a non-empty query and reports usage when the query is missing.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.cli_graph_context_command",
+          "flow.graph_context"
+        ]
+      },
+      {
+        "id": "claim.search_returns_graph_objects_not_edges",
+        "kind": "requirement",
+        "text": "Context results should return component, flow, and claim graph objects; edges are structure for retrieval and should not be exposed as result objects.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.cli_graph_context_command",
+          "flow.graph_context",
+          "component.search_eval_fixture"
+        ]
+      },
+      {
+        "id": "claim.repo_context_uses_git_root",
+        "kind": "fact",
+        "text": "Repo context detection uses git rev-parse --show-toplevel to find the repository root.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.repo_context_detection",
+          "flow.repo_context_detection"
+        ]
+      },
+      {
+        "id": "claim.repo_context_remote_fallback",
+        "kind": "fact",
+        "text": "Repo context detection reads remote.origin.url and falls back to a local: repo-root URL when no origin remote is configured.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.repo_context_detection",
+          "flow.repo_context_detection"
+        ]
+      },
+      {
+        "id": "claim.repo_name_from_remote_or_basename",
+        "kind": "fact",
+        "text": "Repo name is derived from the remote URL last path segment, with the local repository basename as fallback.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": "component.repo_context_detection"
+      },
+      {
+        "id": "claim.default_branch_from_origin_head",
+        "kind": "fact",
+        "text": "Default branch detection reads refs/remotes/origin/HEAD when available and falls back to main.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": "component.repo_context_detection"
+      },
+      {
+        "id": "claim.service_boundary_operations",
+        "kind": "fact",
+        "text": "KnowledgeGraphService is the boundary used by the CLI for init, graph read, graph context, proposal validation, and proposal apply.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.knowledge_graph_service",
+          "flow.cli_command_dispatch"
+        ]
+      },
+      {
+        "id": "claim.init_creates_main_and_working_scopes",
+        "kind": "fact",
+        "text": "Repo initialization upserts the repo, ensures a main scope named after the default branch, and ensures a working scope parented to the main scope.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.knowledge_graph_service",
+          "flow.repo_initialization",
+          "component.scope_model"
+        ]
+      },
+      {
+        "id": "claim.service_reads_current_graph_view",
+        "kind": "fact",
+        "text": "Graph read and graph context both require the repo by remote URL and ask the repository for the current graph view.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.knowledge_graph_service",
+          "flow.graph_read",
+          "flow.graph_context"
+        ]
+      },
+      {
+        "id": "claim.apply_validates_before_writing",
+        "kind": "fact",
+        "text": "Applying a proposal normalizes it, validates it, requires the working scope, creates a memory commit, and writes proposal records to that working scope.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.knowledge_graph_service",
+          "flow.proposal_apply"
+        ]
+      },
+      {
+        "id": "claim.compact_component_fields",
+        "kind": "fact",
+        "text": "Compact component proposals support contains and supersedes relationship fields before normalization.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.proposal_model",
+          "flow.compact_relationships_to_edges"
+        ]
+      },
+      {
+        "id": "claim.compact_flow_fields",
+        "kind": "fact",
+        "text": "Compact flow proposals support contains, touches, and supersedes relationship fields before normalization.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.proposal_model",
+          "flow.compact_relationships_to_edges"
+        ]
+      },
+      {
+        "id": "claim.compact_claim_fields",
+        "kind": "fact",
+        "text": "Compact claim proposals support about and supersedes relationship fields before normalization.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.proposal_model",
+          "flow.compact_relationships_to_edges"
+        ]
+      },
+      {
+        "id": "claim.compact_fields_normalize_to_edges",
+        "kind": "fact",
+        "text": "Proposal normalization removes compact relationship fields from nodes and converts them into canonical edge records.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.proposal_normalization",
+          "flow.compact_relationships_to_edges"
+        ]
+      },
+      {
+        "id": "claim.edge_ids_are_deterministic",
+        "kind": "fact",
+        "text": "Generated edge IDs are deterministic slugs derived from edge kind, endpoint types, and endpoint IDs.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.proposal_normalization",
+          "component.edge_rules"
+        ]
+      },
+      {
+        "id": "claim.normalization_dedupes_edges",
+        "kind": "fact",
+        "text": "Proposal normalization deduplicates generated edges by edge ID.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": "component.proposal_normalization"
+      },
+      {
+        "id": "claim.validation_requires_title_and_creates",
+        "kind": "fact",
+        "text": "Proposal validation requires a proposal object with a non-empty title and an object-valued creates field.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.proposal_validation",
+          "flow.proposal_validation"
+        ]
+      },
+      {
+        "id": "claim.validation_checks_component_fields",
+        "kind": "fact",
+        "text": "Proposal validation checks component IDs, names, duplicate IDs, pre-existing IDs, and optional code anchor type.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.proposal_validation",
+          "component.graph_schema"
+        ]
+      },
+      {
+        "id": "claim.validation_checks_claim_enums",
+        "kind": "fact",
+        "text": "Proposal validation enforces allowed claim kind, truth, and intent values.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.proposal_validation",
+          "component.graph_schema"
+        ]
+      },
+      {
+        "id": "claim.validation_checks_edge_references",
+        "kind": "fact",
+        "text": "Proposal validation checks edge IDs, endpoint types, endpoint existence, edge kinds, direction rules, and metadata shape.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.proposal_validation",
+          "flow.edge_validation"
+        ]
+      },
+      {
+        "id": "claim.edge_about_direction",
+        "kind": "fact",
+        "text": "An about edge must go from a claim to a component or flow.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.edge_rules",
+          "flow.edge_validation"
+        ]
+      },
+      {
+        "id": "claim.edge_contains_direction",
+        "kind": "fact",
+        "text": "A contains edge must connect component to component or flow to flow.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": "component.edge_rules"
+      },
+      {
+        "id": "claim.edge_touches_direction",
+        "kind": "fact",
+        "text": "A touches edge must go from a flow to a component.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": "component.edge_rules"
+      },
+      {
+        "id": "claim.active_view_uses_main_and_working",
+        "kind": "fact",
+        "text": "The active graph view reads current main and working scopes for a repo.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.active_graph_view",
+          "flow.active_graph_view"
+        ]
+      },
+      {
+        "id": "claim.active_view_filters_edges_to_active_endpoints",
+        "kind": "fact",
+        "text": "The active graph view filters edges so returned edges have active from subjects and active to subjects.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.active_graph_view",
+          "flow.active_graph_view"
+        ]
+      },
+      {
+        "id": "claim.context_uses_active_graph_view",
+        "kind": "fact",
+        "text": "Graph context retrieval operates over the active graph view rather than querying raw database tables directly.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.graph_context_retrieval",
+          "component.active_graph_view",
+          "flow.graph_context"
+        ]
+      },
+      {
+        "id": "claim.context_derives_components_from_claims",
+        "kind": "fact",
+        "text": "Graph context derives returned components from the about edges on selected claims.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.graph_context_retrieval",
+          "flow.graph_context"
+        ]
+      },
+      {
+        "id": "claim.context_derives_flows_from_claims",
+        "kind": "fact",
+        "text": "Graph context derives returned flows from the about edges on selected claims.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.graph_context_retrieval",
+          "flow.graph_context"
+        ]
+      },
+      {
+        "id": "claim.memberships_attach_graph_subjects",
+        "kind": "fact",
+        "text": "Graph memberships attach components, flows, claims, and edges to graph scopes so the active graph view can be composed.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.scope_model",
+          "component.sqlite_repository",
+          "component.sqlite_schema",
+          "flow.sqlite_persistence",
+          "flow.active_graph_view"
+        ]
+      },
+      {
+        "id": "claim.context_retrieves_claims",
+        "kind": "fact",
+        "text": "Graph context ranks claims with semantic embeddings, BM25 lexical scores, and exact-match signals.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.graph_context_retrieval",
+          "flow.graph_context"
+        ]
+      },
+      {
+        "id": "claim.context_combines_semantic_bm25_exact",
+        "kind": "fact",
+        "text": "Graph context combines semantic, BM25, and exact scores before applying the claim selection threshold.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": "component.graph_context_retrieval"
+      },
+      {
+        "id": "claim.repo_ids_are_deterministic",
+        "kind": "fact",
+        "text": "The SQLite repository creates deterministic repo IDs from remote URLs using a SHA-1 based helper.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.sqlite_repository",
+          "flow.sqlite_persistence"
+        ]
+      },
+      {
+        "id": "claim.scope_ids_are_deterministic",
+        "kind": "fact",
+        "text": "The SQLite repository creates deterministic scope IDs from repo ID, scope kind, and scope name.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.sqlite_repository",
+          "component.scope_model"
+        ]
+      },
+      {
+        "id": "claim.memory_commits_chain_with_parent",
+        "kind": "fact",
+        "text": "Each memory commit links to the previous commit in the same scope when one exists.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.memory_commit_model",
+          "component.sqlite_repository",
+          "flow.proposal_apply"
+        ]
+      },
+      {
+        "id": "claim.sqlite_schema_tables",
+        "kind": "fact",
+        "text": "The SQLite schema defines repos, graph_scopes, memory_commits, components, flows, claims, edges, claim_embeddings, and graph_memberships tables.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.sqlite_schema",
+          "flow.sqlite_persistence"
+        ]
+      },
+      {
+        "id": "claim.database_path_uses_engineering_context_home",
+        "kind": "fact",
+        "text": "The default SQLite database lives under ENGINEERING_CONTEXT_HOME when that environment variable is set, otherwise it uses the user's .engineering-context directory.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.sqlite_database",
+          "flow.local_database_isolation"
+        ]
+      },
+      {
+        "id": "claim_migrations_apply_schema_sql",
+        "kind": "fact",
+        "text": "Database opening applies the schema SQL migration before repository operations use the database.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.sqlite_database",
+          "component.sqlite_schema"
+        ]
+      },
+      {
+        "id": "claim.agent_runner_spawns_codex",
+        "kind": "fact",
+        "text": "The Codex agent runner launches a Codex process with configured cwd, environment, model, prompt, and transcript paths.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.agent_runner_codex",
+          "flow.bootstrap_eval_generation"
+        ]
+      },
+      {
+        "id": "claim.agent_runner_writes_metrics",
+        "kind": "fact",
+        "text": "Agent runner metrics capture run timing and process result details for eval reporting.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.agent_runner_metrics",
+          "component.bootstrap_eval_runner"
+        ]
+      },
+      {
+        "id": "claim.bootstrap_eval_clones_pinned_repo",
+        "kind": "fact",
+        "text": "The bootstrap eval clones a pinned target repository commit before asking for or applying a bootstrap proposal.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.bootstrap_eval_runner",
+          "flow.bootstrap_eval_generation"
+        ]
+      },
+      {
+        "id": "claim.bootstrap_eval_accepts_fixture_or_codex",
+        "kind": "fact",
+        "text": "The bootstrap eval accepts either a proposal fixture path or a Codex agent generation mode.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.bootstrap_eval_runner",
+          "flow.bootstrap_eval_generation"
+        ]
+      },
+      {
+        "id": "claim.bootstrap_eval_judge_scores_nodes_edges_quality",
+        "kind": "fact",
+        "text": "The bootstrap eval judge classifies expected nodes, expected edges, and quality issues before the runner computes the numeric score.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.bootstrap_eval_runner",
+          "component.bootstrap_eval_rubric",
+          "flow.bootstrap_eval_judging"
+        ]
+      },
+      {
+        "id": "claim.bootstrap_eval_is_not_search_eval",
+        "kind": "decision",
+        "text": "Bootstrap evaluation measures whether an agent can create shallow high-signal memory, while search evaluation should measure retrieval over an already seeded deeper graph.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.bootstrap_eval_runner",
+          "component.search_eval_fixture",
+          "flow.search_eval_retrieval"
+        ]
+      },
+      {
+        "id": "claim.engineering_memory_skill_runs_init_and_read",
+        "kind": "fact",
+        "text": "The engineering-memory skill tells agents to run ec init and ec graph read before inspecting and proposing memory updates.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.engineering_memory_skill",
+          "flow.engineering_memory_bootstrap"
+        ]
+      },
+      {
+        "id": "claim.engineering_memory_skill_prefers_shallow_high_signal",
+        "kind": "fact",
+        "text": "The engineering-memory skill prefers shallow high-signal memory, important subsystems, and human workflows over exhaustive function-level traces.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.engineering_memory_skill",
+          "flow.engineering_memory_bootstrap"
+        ]
+      },
+      {
+        "id": "claim.engineering_memory_skill_validates_before_apply",
+        "kind": "fact",
+        "text": "The engineering-memory skill instructs agents to validate proposals and only apply when explicitly asked.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.engineering_memory_skill",
+          "component.cli_proposal_commands"
+        ]
+      },
+      {
+        "id": "claim.package_build_compiles_apps_libs_evals",
+        "kind": "fact",
+        "text": "The package build script runs TypeScript build output into dist using tsconfig.build.json, and TypeScript includes apps, libs, and evals.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": "component.package_scripts"
+      },
+      {
+        "id": "claim.package_exposes_ec_binary",
+        "kind": "fact",
+        "text": "The package exposes an ec binary that points to dist/apps/cli/main.js.",
+        "truth": "code_verified",
+        "intent": "intended",
+        "about": [
+          "component.package_scripts",
+          "component.cli_app"
+        ]
+      },
+      {
+        "id": "claim.search_eval_uses_deep_fixture",
+        "kind": "decision",
+        "text": "The search benchmark should seed a deliberately deep synthetic graph fixture rather than reuse shallow bootstrap output.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.search_eval_fixture",
+          "flow.search_eval_retrieval"
+        ]
+      },
+      {
+        "id": "claim.search_eval_queries_are_task_sentences",
+        "kind": "decision",
+        "text": "Search benchmark queries should be task-oriented sentences describing what an agent wants to understand, not implementation-specific keyword probes.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.search_eval_fixture",
+          "flow.search_eval_retrieval"
+        ]
+      },
+      {
+        "id": "claim.search_eval_uses_graded_relevance",
+        "kind": "decision",
+        "text": "The search benchmark should grade expected objects as highly relevant, relevant, or weakly relevant and evaluate ranked retrieval with Precision@5, Recall@5, MRR@5, nDCG@5, and GradeRecall@5.",
+        "truth": "source_verified",
+        "intent": "intended",
+        "about": [
+          "component.search_eval_fixture",
+          "flow.search_eval_retrieval"
+        ]
+      }
+    ]
+  }
+}

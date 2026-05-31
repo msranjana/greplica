@@ -1,0 +1,366 @@
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  type CommandResult,
+  findRepoRoot,
+  git,
+  gitOptional,
+  readJson,
+  round,
+  run,
+  timestamp,
+  writeJson,
+} from "../../lib/common.js";
+
+const caseId = "search-current-repo";
+const allowedResultTypes = new Set(["component", "flow", "claim"]);
+
+interface RunContext {
+  repoRoot: string;
+  runDir: string;
+  ecHomeDir: string;
+  proposalPath: string;
+  rubricPath: string;
+  ecCommand: string[];
+}
+
+interface SearchRubric {
+  case_id: string;
+  benchmark_version: string;
+  k: number;
+  score: {
+    pass_threshold: number;
+    weights: {
+      precision_at_k: number;
+      recall_at_k: number;
+      mrr_at_k: number;
+      ndcg_at_k: number;
+      grade_recall_at_k: number;
+    };
+    minimums: {
+      precision_at_k: number;
+      recall_at_k: number;
+      mrr_at_k: number;
+      ndcg_at_k: number;
+      grade_recall_at_k: number;
+    };
+  };
+  queries: SearchQueryCase[];
+}
+
+interface SearchQueryCase {
+  id: string;
+  query: string;
+  highly_relevant: string[];
+  relevant: string[];
+  weakly_relevant: string[];
+}
+
+interface QueryScore {
+  id: string;
+  query: string;
+  returned_ids: string[];
+  expected: {
+    highly_relevant: string[];
+    relevant: string[];
+    weakly_relevant: string[];
+  };
+  command: CommandResult;
+  precision_at_k: number;
+  recall_at_k: number;
+  mrr_at_k: number;
+  ndcg_at_k: number;
+  grade_recall_at_k: number;
+  passed: boolean;
+}
+
+interface AggregateScore {
+  precision_at_k: number;
+  recall_at_k: number;
+  mrr_at_k: number;
+  ndcg_at_k: number;
+  grade_recall_at_k: number;
+  final_score: number;
+  pass_threshold: number;
+  passed: boolean;
+}
+
+interface EvalResult {
+  case_id: string;
+  benchmark_version: string;
+  target_repo: {
+    remote_url: string;
+    commit: string;
+    branch: string;
+  };
+  run_dir: string;
+  ec_home_dir: string;
+  proposal_path: string;
+  rubric_path: string;
+  setup_commands: CommandResult[];
+  query_scores: QueryScore[];
+  score: AggregateScore;
+  success: boolean;
+}
+
+try {
+  main();
+} catch (error: unknown) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+}
+
+function main(): void {
+  const context = prepareRun();
+  const rubric = readJson<SearchRubric>(context.rubricPath);
+  validateRubric(rubric);
+
+  const setupCommands = [
+    runProductCommand(context, "init"),
+    runProductCommand(context, "proposal", "validate", context.proposalPath),
+    runProductCommand(context, "proposal", "apply", context.proposalPath),
+  ];
+
+  const queryScores = setupCommands.every((command) => command.exit_code === 0)
+    ? rubric.queries.map((queryCase) => runQuery(context, rubric, queryCase))
+    : [];
+  const score = scoreRun(rubric, queryScores);
+  const success = setupCommands.every((command) => command.exit_code === 0) && score.passed;
+
+  writeResult(context, rubric, setupCommands, queryScores, score, success);
+
+  console.log(success ? "Search eval passed." : "Search eval failed.");
+  console.log(`Run directory: ${context.runDir}`);
+  console.log(`Score: ${score.final_score.toFixed(2)} / 100`);
+  console.log(
+    `P@${rubric.k}: ${score.precision_at_k.toFixed(3)}  R@${rubric.k}: ${score.recall_at_k.toFixed(3)}  MRR@${rubric.k}: ${score.mrr_at_k.toFixed(3)}  nDCG@${rubric.k}: ${score.ndcg_at_k.toFixed(3)}  GradeRecall@${rubric.k}: ${score.grade_recall_at_k.toFixed(3)}`,
+  );
+  process.exitCode = success ? 0 : 1;
+}
+
+function prepareRun(): RunContext {
+  const repoRoot = findRepoRoot(import.meta.url);
+  const runDir = resolve(repoRoot, "eval-runs", timestamp(), caseId);
+  const ecHomeDir = resolve(runDir, "ec-home");
+
+  mkdirSync(runDir, { recursive: true });
+  mkdirSync(ecHomeDir, { recursive: true });
+
+  return {
+    repoRoot,
+    runDir,
+    ecHomeDir,
+    proposalPath: resolve(repoRoot, "evals/cases/search-current-repo/proposal.json"),
+    rubricPath: resolve(repoRoot, "evals/cases/search-current-repo/rubric.json"),
+    ecCommand: ["node", resolve(repoRoot, "dist/apps/cli/main.js")],
+  };
+}
+
+function runQuery(context: RunContext, rubric: SearchRubric, queryCase: SearchQueryCase): QueryScore {
+  const command = runProductCommand(context, "graph", "context", queryCase.query);
+  const returnedIds = command.exit_code === 0 ? parseReturnedIds(command.stdout ?? "") : [];
+  const qrels = qrelsFor(queryCase);
+  const metrics = scoreQuery(qrels, returnedIds, rubric.k);
+
+  return {
+    id: queryCase.id,
+    query: queryCase.query,
+    returned_ids: returnedIds,
+    expected: {
+      highly_relevant: queryCase.highly_relevant,
+      relevant: queryCase.relevant,
+      weakly_relevant: queryCase.weakly_relevant,
+    },
+    command,
+    ...metrics,
+    passed: command.exit_code === 0 && metrics.recall_at_k > 0 && metrics.mrr_at_k > 0,
+  };
+}
+
+function scoreQuery(qrels: Map<string, number>, returnedIds: string[], k: number): Omit<QueryScore, "id" | "query" | "returned_ids" | "expected" | "command" | "passed"> {
+  const topK = returnedIds.slice(0, k);
+  const expectedIds = [...qrels.keys()];
+  const seen = new Set<string>();
+  const relevantInTopK: string[] = [];
+  let retrievedGradeSum = 0;
+
+  for (const id of topK) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const grade = qrels.get(id) ?? 0;
+    if (grade > 0) {
+      relevantInTopK.push(id);
+      retrievedGradeSum += grade;
+    }
+  }
+
+  const firstRelevantIndex = topK.findIndex((id) => (qrels.get(id) ?? 0) > 0);
+  const totalGrade = [...qrels.values()].reduce((sum, grade) => sum + grade, 0);
+
+  return {
+    precision_at_k: round(relevantInTopK.length / k),
+    recall_at_k: round(relevantInTopK.length / expectedIds.length),
+    mrr_at_k: round(firstRelevantIndex === -1 ? 0 : 1 / (firstRelevantIndex + 1)),
+    ndcg_at_k: round(dcg(topK.map((id) => qrels.get(id) ?? 0)) / idealDcg([...qrels.values()], k)),
+    grade_recall_at_k: round(totalGrade === 0 ? 0 : retrievedGradeSum / totalGrade),
+  };
+}
+
+function scoreRun(rubric: SearchRubric, queryScores: QueryScore[]): AggregateScore {
+  const precision = average(queryScores.map((score) => score.precision_at_k));
+  const recall = average(queryScores.map((score) => score.recall_at_k));
+  const mrr = average(queryScores.map((score) => score.mrr_at_k));
+  const ndcg = average(queryScores.map((score) => score.ndcg_at_k));
+  const gradeRecall = average(queryScores.map((score) => score.grade_recall_at_k));
+  const weights = rubric.score.weights;
+  const finalScore = round(
+    precision * weights.precision_at_k +
+      recall * weights.recall_at_k +
+      mrr * weights.mrr_at_k +
+      ndcg * weights.ndcg_at_k +
+      gradeRecall * weights.grade_recall_at_k,
+  );
+  const minimums = rubric.score.minimums;
+  const enoughQueriesRan = queryScores.length === rubric.queries.length;
+  const passed =
+    enoughQueriesRan &&
+    finalScore >= rubric.score.pass_threshold &&
+    precision >= minimums.precision_at_k &&
+    recall >= minimums.recall_at_k &&
+    mrr >= minimums.mrr_at_k &&
+    ndcg >= minimums.ndcg_at_k &&
+    gradeRecall >= minimums.grade_recall_at_k;
+
+  return {
+    precision_at_k: precision,
+    recall_at_k: recall,
+    mrr_at_k: mrr,
+    ndcg_at_k: ndcg,
+    grade_recall_at_k: gradeRecall,
+    final_score: finalScore,
+    pass_threshold: rubric.score.pass_threshold,
+    passed,
+  };
+}
+
+function qrelsFor(queryCase: SearchQueryCase): Map<string, number> {
+  const qrels = new Map<string, number>();
+  addQrels(qrels, queryCase.weakly_relevant, 1);
+  addQrels(qrels, queryCase.relevant, 2);
+  addQrels(qrels, queryCase.highly_relevant, 3);
+  return qrels;
+}
+
+function addQrels(qrels: Map<string, number>, ids: string[], grade: number): void {
+  for (const id of ids) qrels.set(id, Math.max(qrels.get(id) ?? 0, grade));
+}
+
+function parseReturnedIds(stdout: string): string[] {
+  const parsed = JSON.parse(stdout) as unknown;
+  if (!isRecord(parsed)) {
+    throw new Error("Graph context JSON output must be an object.");
+  }
+
+  return [
+    ...parseTypedResults(parsed.claims, "claim"),
+    ...parseTypedResults(parsed.components, "component"),
+    ...parseTypedResults(parsed.flows, "flow"),
+  ]
+    .sort((a, b) => b.score - a.score || resultTypeOrder(a.type) - resultTypeOrder(b.type) || a.id.localeCompare(b.id))
+    .map((result) => `${result.type}:${result.id}`);
+}
+
+function parseTypedResults(value: unknown, type: "claim" | "component" | "flow"): Array<{ type: "claim" | "component" | "flow"; id: string; score: number }> {
+  if (!Array.isArray(value)) throw new Error(`Graph context JSON output must include a ${type}s array.`);
+  return value.map((result) => {
+    if (!isRecord(result) || !isRecord(result.object) || typeof result.object.id !== "string") {
+      throw new Error(`Each ${type} result must include object.id.`);
+    }
+    return {
+      type,
+      id: result.object.id,
+      score: typeof result.score === "number" ? result.score : 0,
+    };
+  });
+}
+
+function resultTypeOrder(type: "claim" | "component" | "flow"): number {
+  switch (type) {
+    case "component":
+      return 0;
+    case "flow":
+      return 1;
+    case "claim":
+      return 2;
+  }
+}
+
+function validateRubric(rubric: SearchRubric): void {
+  if (rubric.queries.length !== 30) {
+    throw new Error(`Expected exactly 30 search queries, found ${rubric.queries.length}.`);
+  }
+  for (const query of rubric.queries) {
+    const ids = [...query.highly_relevant, ...query.relevant, ...query.weakly_relevant];
+    if (ids.length === 0) throw new Error(`Query ${query.id} has no expected relevant IDs.`);
+    for (const id of ids) {
+      const [type] = id.split(":");
+      if (!allowedResultTypes.has(type ?? "")) {
+        throw new Error(`Query ${query.id} references unsupported result ID ${id}.`);
+      }
+    }
+  }
+}
+
+function writeResult(
+  context: RunContext,
+  rubric: SearchRubric,
+  setupCommands: CommandResult[],
+  queryScores: QueryScore[],
+  score: AggregateScore,
+  success: boolean,
+): void {
+  const result: EvalResult = {
+    case_id: rubric.case_id,
+    benchmark_version: rubric.benchmark_version,
+    target_repo: {
+      remote_url: gitOptional(context.repoRoot, ["config", "--get", "remote.origin.url"]) ?? `local:${context.repoRoot}`,
+      commit: git(context.repoRoot, ["rev-parse", "HEAD"]),
+      branch: gitOptional(context.repoRoot, ["branch", "--show-current"]) ?? "",
+    },
+    run_dir: context.runDir,
+    ec_home_dir: context.ecHomeDir,
+    proposal_path: context.proposalPath,
+    rubric_path: context.rubricPath,
+    setup_commands: setupCommands,
+    query_scores: queryScores,
+    score,
+    success,
+  };
+
+  writeJson(resolve(context.runDir, "result.json"), result);
+}
+
+function runProductCommand(context: RunContext, ...args: string[]): CommandResult {
+  return run([...context.ecCommand, ...args], context.repoRoot, {
+    ...process.env,
+    ENGINEERING_CONTEXT_HOME: context.ecHomeDir,
+  });
+}
+
+function dcg(grades: number[]): number {
+  return grades.reduce((sum, grade, index) => sum + ((2 ** grade - 1) / Math.log2(index + 2)), 0);
+}
+
+function idealDcg(grades: number[], k: number): number {
+  const ideal = dcg([...grades].sort((a, b) => b - a).slice(0, k));
+  return ideal === 0 ? 1 : ideal;
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) return 0;
+  return round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

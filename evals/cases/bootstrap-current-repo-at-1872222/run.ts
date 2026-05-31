@@ -1,19 +1,23 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  type CommandResult,
+  findRepoRoot,
+  readJson,
+  repoTree,
+  round,
+  run,
+  runOrThrow,
+  timestamp,
+  valueAfter,
+  writeJson,
+} from "../../lib/common.js";
 import { runCodexAgent } from "../../../libs/agent-runner/codex.js";
 import type { AgentRunResult } from "../../../libs/agent-runner/types.js";
 
 const caseId = "bootstrap-current-repo-at-1872222";
 const targetRepoUrl = "git@github.com:Autoloops/engineering-context.git";
 const targetCommit = "1872222671c85b347950462bc65ef3da3611ed6e";
-
-interface CommandResult {
-  command: string[];
-  exit_code: number | null;
-  signal: string | null;
-}
 
 interface Args {
   proposal?: string;
@@ -151,7 +155,7 @@ async function main(): Promise<void> {
 }
 
 function prepareRun(): RunContext {
-  const repoRoot = findRepoRoot();
+  const repoRoot = findRepoRoot(import.meta.url);
   const runDir = resolve(repoRoot, "eval-runs", timestamp(), caseId);
   const targetRepoDir = resolve(runDir, "target-repo");
   const ecHomeDir = resolve(runDir, "ec-home");
@@ -221,7 +225,7 @@ function runProductCommands(context: RunContext): CommandResult[] {
 
 function runProductCommand(context: RunContext, ...args: string[]): CommandResult {
   const env = { ...process.env, ENGINEERING_CONTEXT_HOME: context.ecHomeDir };
-  return run([...context.ecCommand, ...args], context.targetRepoDir, env);
+  return run([...context.ecCommand, ...args], context.targetRepoDir, env, { stdio: "inherit" });
 }
 
 async function runOpenAiJudge(
@@ -244,10 +248,10 @@ async function runOpenAiJudge(
   };
   const judgeInputPath = resolve(context.runDir, "judge-input.json");
   const judgeOutputPath = resolve(context.runDir, "judge-output.json");
-  writeFileSync(judgeInputPath, `${JSON.stringify(judgeInput, null, 2)}\n`);
+  writeJson(judgeInputPath, judgeInput);
 
   const judgeOutput = await requestJudge(apiKey, model, judgeInput);
-  writeFileSync(judgeOutputPath, `${JSON.stringify(judgeOutput, null, 2)}\n`);
+  writeJson(judgeOutputPath, judgeOutput);
 
   return {
     model,
@@ -278,7 +282,7 @@ function writeResult(
     judge,
   };
 
-  writeFileSync(resolve(context.runDir, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
+  writeJson(resolve(context.runDir, "result.json"), result);
 }
 
 function parseArgs(args: string[]): Args {
@@ -298,27 +302,6 @@ function parseArgs(args: string[]): Args {
   const judgeModel = valueAfter(args, "--judge-model");
 
   return { proposal, agent, agentModel, judge, judgeModel };
-}
-
-function runOrThrow(command: string[], cwd: string): void {
-  const result = run(command, cwd, process.env);
-  if (result.exit_code !== 0) {
-    throw new Error(`Command failed: ${command.join(" ")}`);
-  }
-}
-
-function run(command: string[], cwd: string, env: NodeJS.ProcessEnv): CommandResult {
-  const result = spawnSync(command[0] ?? "", command.slice(1), {
-    cwd,
-    env,
-    stdio: "inherit",
-  });
-
-  return {
-    command,
-    exit_code: result.status,
-    signal: result.signal,
-  };
 }
 
 function codexBootstrapPrompt(context: RunContext): string {
@@ -350,19 +333,6 @@ Task:
 6. Do not apply the proposal.
 
 The proposal should be useful to a future coding agent and should avoid deep implementation trivia.`;
-}
-
-function readJson<T>(path: string): T {
-  return JSON.parse(readFileSync(path, "utf8")) as T;
-}
-
-function repoTree(cwd: string): string[] {
-  const output = spawnSync("git", ["ls-tree", "-r", "--name-only", "HEAD"], {
-    cwd,
-    encoding: "utf8",
-  });
-  if (output.status !== 0) throw new Error("Failed to read target repo tree.");
-  return output.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
 async function requestJudge(apiKey: string, model: string, input: JudgeInput): Promise<JudgeOutput> {
@@ -421,10 +391,10 @@ function scoreJudgeOutput(rubric: Rubric, judge: JudgeOutput): ScoreResult {
   const finalScore = nodeScore + edgeScore + qualityScore;
 
   return {
-    node_score: round(nodeScore),
-    edge_score: round(edgeScore),
-    quality_score: round(qualityScore),
-    final_score: round(finalScore),
+    node_score: round(nodeScore, 2),
+    edge_score: round(edgeScore, 2),
+    quality_score: round(qualityScore, 2),
+    final_score: round(finalScore, 2),
     pass_threshold: rubric.score.pass_threshold,
     passed: finalScore >= rubric.score.pass_threshold,
   };
@@ -535,21 +505,4 @@ function judgeOutputSchema(): Record<string, unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function round(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-function valueAfter(args: string[], flag: string): string | undefined {
-  const index = args.indexOf(flag);
-  return index === -1 ? undefined : args[index + 1];
-}
-
-function findRepoRoot(): string {
-  return resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
-}
-
-function timestamp(): string {
-  return new Date().toISOString().replace(/[:.]/g, "-");
 }
