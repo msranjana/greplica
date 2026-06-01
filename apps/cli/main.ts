@@ -33,20 +33,12 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
-  if (area === "graph" && action === "search") {
-    const query = rest.join(" ").trim();
-    if (query.length === 0) throw new Error("Usage: ec graph search <query>");
+  if (area === "graph" && action === "context") {
+    const query = rest.filter((arg) => arg !== "--json").join(" ").trim();
+    if (query.length === 0) throw new Error(`Usage: ec graph ${action} <query>`);
     const repo = detectRepoContext();
-    const results = service.searchGraph(repo, query);
-    if (results.length === 0) {
-      console.log("No matching memory found.");
-      return;
-    }
-    console.log(`Found ${results.length} result(s):`);
-    for (const result of results) {
-      console.log(`- ${result.type}:${result.id} ${result.label}`);
-      if (result.text.length > 0) console.log(`  ${result.text}`);
-    }
+    const result = await service.contextGraph(repo, query);
+    console.log(JSON.stringify(result, null, 2));
     return;
   }
 
@@ -69,7 +61,7 @@ async function main(argv: string[]): Promise<void> {
     const file = requireFile(rest[0], "Usage: ec proposal apply <file>");
     const repo = detectRepoContext();
     const proposal = readProposal(file);
-    const result = service.applyProposal(repo, proposal);
+    const result = await service.applyProposal(repo, proposal);
     console.log("Applied proposal to working memory.");
     console.log(`Memory commit: ${result.memory_commit_id}`);
     console.log(`Scope: ${result.scope_id}`);
@@ -78,6 +70,9 @@ async function main(argv: string[]): Promise<void> {
     console.log(`Claims: ${result.created.claims}`);
     console.log(`Sources: ${result.created.sources}`);
     console.log(`Edges: ${result.created.edges}`);
+    console.log(`Embeddings checked: ${result.embedding_status.checked_objects}`);
+    console.log(`Embeddings created: ${result.embedding_status.created}`);
+    console.log(`Embeddings reused: ${result.embedding_status.reused}`);
     return;
   }
 
@@ -120,7 +115,7 @@ function printHelp(): void {
   console.log(`Usage:
   ${cli} init
   ${cli} graph read
-  ${cli} graph search <query>
+  ${cli} graph context <query>
   ${cli} proposal validate <file>
   ${cli} proposal apply <file>`);
 }

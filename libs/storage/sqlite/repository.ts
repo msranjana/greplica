@@ -42,6 +42,29 @@ type MembershipRow = {
 
 type EdgeRow = Omit<Edge, "metadata"> & { metadata: string | null };
 
+export type EmbeddingObjectType = "claim" | "component" | "flow";
+
+export interface GraphObjectEmbeddingRecord {
+  repo_id: string;
+  object_type: EmbeddingObjectType;
+  object_id: string;
+  provider: string;
+  model: string;
+  dimensions: number;
+  embedding: Buffer;
+  created_at: string;
+}
+
+export interface InsertGraphObjectEmbeddingInput {
+  repo_id: string;
+  object_type: EmbeddingObjectType;
+  object_id: string;
+  provider: string;
+  model: string;
+  dimensions: number;
+  embedding: Buffer;
+}
+
 export class SqliteRepository {
   constructor(private readonly db: Database.Database) {}
 
@@ -140,40 +163,6 @@ export class SqliteRepository {
     };
   }
 
-  searchGraphView(repoId: string, query: string): { type: string; id: string; label: string; text: string }[] {
-    const graph = this.readGraphView(repoId);
-    const normalized = query.trim().toLowerCase();
-    if (normalized.length === 0) return [];
-
-    const results: { type: string; id: string; label: string; text: string }[] = [];
-
-    for (const component of graph.components) {
-      if (matches(component.name, normalized) || matches(component.code_anchor, normalized)) {
-        results.push({ type: "component", id: component.id, label: component.name, text: component.code_anchor ?? "" });
-      }
-    }
-
-    for (const flow of graph.flows) {
-      if (matches(flow.name, normalized)) {
-        results.push({ type: "flow", id: flow.id, label: flow.name, text: "" });
-      }
-    }
-
-    for (const claim of graph.claims) {
-      if (matches(claim.text, normalized) || matches(claim.kind, normalized)) {
-        results.push({ type: "claim", id: claim.id, label: claim.kind, text: claim.text });
-      }
-    }
-
-    for (const source of graph.sources) {
-      if (matches(source.ref, normalized) || matches(source.title, normalized) || matches(source.kind, normalized)) {
-        results.push({ type: "source", id: source.id, label: source.title ?? source.ref, text: source.kind });
-      }
-    }
-
-    return results;
-  }
-
   createMemoryCommit(input: CreateMemoryCommitInput): MemoryCommit {
     const parent = this.db
       .prepare("SELECT id FROM memory_commits WHERE scope_id = ? ORDER BY created_at DESC LIMIT 1")
@@ -253,6 +242,38 @@ export class SqliteRepository {
       if (this.subjectExists(type, id)) return type;
     }
     return undefined;
+  }
+
+  listGraphObjectEmbeddings(input: {
+    repo_id: string;
+    provider: string;
+    model: string;
+    dimensions: number;
+  }): GraphObjectEmbeddingRecord[] {
+    return this.db
+      .prepare(
+        `SELECT repo_id, object_type, object_id, provider, model, dimensions, embedding, created_at
+         FROM graph_object_embeddings
+         WHERE repo_id = @repo_id
+           AND provider = @provider
+           AND model = @model
+           AND dimensions = @dimensions`,
+      )
+      .all(input) as GraphObjectEmbeddingRecord[];
+  }
+
+  insertGraphObjectEmbeddings(inputs: InsertGraphObjectEmbeddingInput[]): void {
+    if (inputs.length === 0) return;
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO graph_object_embeddings
+        (repo_id, object_type, object_id, provider, model, dimensions, embedding, created_at)
+       VALUES
+        (@repo_id, @object_type, @object_id, @provider, @model, @dimensions, @embedding, @created_at)`,
+    );
+    const write = this.db.transaction((records: InsertGraphObjectEmbeddingInput[]) => {
+      for (const record of records) insert.run({ ...record, created_at: now() });
+    });
+    write(inputs);
   }
 
   private createMembership(
@@ -369,8 +390,4 @@ function now(): string {
 
 function placeholders(values: unknown[]): string {
   return values.map(() => "?").join(", ");
-}
-
-function matches(value: string | undefined, query: string): boolean {
-  return value?.toLowerCase().includes(query) ?? false;
 }

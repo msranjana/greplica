@@ -1,0 +1,622 @@
+{
+  "case_id": "search-current-repo",
+  "benchmark_version": "0.2.0",
+  "target": "current workspace repo",
+  "k": 10,
+  "score": {
+    "pass_threshold": 80,
+    "weights": {
+      "precision_at_k": 10,
+      "recall_at_k": 25,
+      "mrr_at_k": 15,
+      "ndcg_at_k": 25,
+      "grade_recall_at_k": 25
+    },
+    "minimums": {
+      "precision_at_k": 0.2,
+      "recall_at_k": 0.35,
+      "mrr_at_k": 0.6,
+      "ndcg_at_k": 0.6,
+      "grade_recall_at_k": 0.4
+    }
+  },
+  "relevance_grades": {
+    "highly_relevant": 3,
+    "relevant": 2,
+    "weakly_relevant": 1
+  },
+  "methodology": {
+    "summary": "This eval seeds a deliberately deep synthetic graph fixture for the current repo and scores task-sentence graph context retrieval over typed graph objects derived from claim retrieval. It is not a bootstrap-memory quality eval.",
+    "result_types": [
+      "component",
+      "flow",
+      "claim"
+    ],
+    "metrics": [
+      "Precision@10 counts how many top-ten context objects have any positive relevance grade.",
+      "Recall@10 counts how many expected positive objects appear in the top ten.",
+      "MRR@10 rewards the rank of the first positively relevant object.",
+      "nDCG@10 uses graded relevance so highly relevant objects ranked earlier receive more credit.",
+      "GradeRecall@10 is the retrieved relevance-grade sum divided by the total expected relevance-grade sum."
+    ]
+  },
+  "queries": [
+    {
+      "id": "q01_cli_command_dispatch",
+      "query": "I am adding a CLI command and want to understand how command routing and service delegation currently work.",
+      "highly_relevant": [
+        "component:component.cli_app",
+        "flow:flow.cli_command_dispatch",
+        "claim:claim.cli_is_thin_service_wrapper"
+      ],
+      "relevant": [
+        "component:component.knowledge_graph_service",
+        "component:component.repo_context_detection"
+      ],
+      "weakly_relevant": [
+        "claim:claim.cli_constructs_service_once"
+      ]
+    },
+    {
+      "id": "q02_repo_identity_detection",
+      "query": "I am changing how the tool identifies the current repository and need to understand how repo identity is derived.",
+      "highly_relevant": [
+        "component:component.repo_context_detection",
+        "flow:flow.repo_context_detection",
+        "claim:claim.repo_context_uses_git_root"
+      ],
+      "relevant": [
+        "claim:claim.repo_context_remote_fallback",
+        "claim:claim.repo_name_from_remote_or_basename",
+        "claim:claim.default_branch_from_origin_head"
+      ],
+      "weakly_relevant": [
+        "component:component.cli_app"
+      ]
+    },
+    {
+      "id": "q03_init_scopes",
+      "query": "I am modifying repo initialization and need to know how main and working scopes are created.",
+      "highly_relevant": [
+        "flow:flow.repo_initialization",
+        "claim:claim.init_creates_main_and_working_scopes",
+        "component:component.scope_model"
+      ],
+      "relevant": [
+        "component:component.cli_init_command",
+        "component:component.knowledge_graph_service",
+        "component:component.sqlite_repository"
+      ],
+      "weakly_relevant": [
+        "claim:claim.init_prints_repo_scope_database"
+      ]
+    },
+    {
+      "id": "q04_graph_read_sections",
+      "query": "I am changing graph read output and need to understand what sections are printed today.",
+      "highly_relevant": [
+        "component:component.cli_graph_read_command",
+        "flow:flow.graph_read",
+        "claim:claim.graph_read_prints_all_sections"
+      ],
+      "relevant": [
+        "component:component.active_graph_view",
+        "claim:claim.service_reads_current_graph_view"
+      ],
+      "weakly_relevant": [
+        "component:component.cli_app"
+      ]
+    },
+    {
+      "id": "q05_context_result_types",
+      "query": "I am adding JSON output to graph context and need to know which object types context should return.",
+      "highly_relevant": [
+        "component:component.cli_graph_context_command",
+        "claim:claim.search_returns_graph_objects_not_edges",
+        "flow:flow.graph_context"
+      ],
+      "relevant": [
+        "component:component.graph_context_retrieval",
+        "component:component.knowledge_graph_service",
+        "claim:claim.service_reads_current_graph_view"
+      ],
+      "weakly_relevant": [
+        "component:component.cli_app"
+      ]
+    },
+    {
+      "id": "q06_context_signals",
+      "query": "I am improving graph context retrieval and want to know which ranking signals are combined.",
+      "highly_relevant": [
+        "component:component.graph_context_retrieval",
+        "claim:claim.context_derives_components_from_claims",
+        "claim:claim.context_retrieves_claims"
+      ],
+      "relevant": [
+        "claim:claim.context_derives_flows_from_claims",
+        "claim:claim.context_combines_semantic_bm25_exact",
+        "flow:flow.graph_context"
+      ],
+      "weakly_relevant": [
+        "component:component.active_graph_view"
+      ]
+    },
+    {
+      "id": "q07_active_graph_view",
+      "query": "I am debugging missing graph results and need to understand how the active graph view is assembled.",
+      "highly_relevant": [
+        "component:component.active_graph_view",
+        "flow:flow.active_graph_view",
+        "claim:claim.active_view_uses_main_and_working"
+      ],
+      "relevant": [
+        "claim:claim.active_view_filters_edges_to_active_endpoints",
+        "component:component.sqlite_repository",
+        "component:component.scope_model"
+      ],
+      "weakly_relevant": [
+        "flow:flow.graph_read",
+        "flow:flow.graph_context"
+      ]
+    },
+    {
+      "id": "q08_active_edge_visibility",
+      "query": "I am debugging why an edge does not appear in graph read output and need to understand how active graph view filtering works.",
+      "highly_relevant": [
+        "component:component.active_graph_view",
+        "claim:claim.active_view_filters_edges_to_active_endpoints"
+      ],
+      "relevant": [
+        "claim:claim.active_view_uses_main_and_working",
+        "flow:flow.active_graph_view",
+        "component:component.sqlite_repository"
+      ],
+      "weakly_relevant": [
+        "component:component.scope_model",
+        "component:component.graph_schema"
+      ]
+    },
+    {
+      "id": "q09_compact_relationships",
+      "query": "I am changing compact proposal syntax and need to understand how inline relationship fields become canonical graph edges.",
+      "highly_relevant": [
+        "component:component.proposal_normalization",
+        "flow:flow.compact_relationships_to_edges",
+        "claim:claim.compact_fields_normalize_to_edges"
+      ],
+      "relevant": [
+        "component:component.proposal_model",
+        "claim:claim.compact_component_fields",
+        "claim:claim.compact_flow_fields",
+        "claim:claim.compact_claim_fields",
+        "claim:claim.edge_ids_are_deterministic"
+      ],
+      "weakly_relevant": [
+        "component:component.edge_rules"
+      ]
+    },
+    {
+      "id": "q10_edge_validation",
+      "query": "I am fixing a proposal validation error and need to understand how allowed edge endpoint types and directions are checked.",
+      "highly_relevant": [
+        "component:component.proposal_validation",
+        "flow:flow.edge_validation",
+        "claim:claim.validation_checks_edge_references"
+      ],
+      "relevant": [
+        "component:component.edge_rules",
+        "claim:claim.edge_about_direction",
+        "claim:claim.edge_contains_direction",
+        "claim:claim.edge_touches_direction"
+      ],
+      "weakly_relevant": [
+        "component:component.graph_schema"
+      ]
+    },
+    {
+      "id": "q11_claim_validation",
+      "query": "I am updating claim validation and need to know which claim fields and enum values are enforced.",
+      "highly_relevant": [
+        "component:component.proposal_validation",
+        "claim:claim.validation_checks_claim_enums",
+        "component:component.graph_schema"
+      ],
+      "relevant": [
+        "flow:flow.proposal_validation",
+        "claim:claim.validation_requires_title_and_creates"
+      ],
+      "weakly_relevant": [
+        "component:component.proposal_model"
+      ]
+    },
+    {
+      "id": "q12_compact_claim_relationships",
+      "query": "I am changing compact claim relationship fields and need to understand how they become canonical edges.",
+      "highly_relevant": [
+        "component:component.proposal_model",
+        "claim:claim.compact_claim_fields",
+        "component:component.proposal_normalization"
+      ],
+      "relevant": [
+        "flow:flow.compact_relationships_to_edges",
+        "claim:claim.compact_fields_normalize_to_edges",
+        "component:component.edge_rules"
+      ],
+      "weakly_relevant": [
+        "component:component.proposal_validation",
+        "flow:flow.edge_validation"
+      ]
+    },
+    {
+      "id": "q13_apply_memory_commit",
+      "query": "I am changing proposal apply and need to understand how memory commits are created and linked.",
+      "highly_relevant": [
+        "flow:flow.proposal_apply",
+        "claim:claim.apply_validates_before_writing",
+        "claim:claim.memory_commits_chain_with_parent"
+      ],
+      "relevant": [
+        "component:component.memory_commit_model",
+        "component:component.sqlite_repository",
+        "component:component.knowledge_graph_service"
+      ],
+      "weakly_relevant": [
+        "component:component.cli_proposal_commands"
+      ]
+    },
+    {
+      "id": "q14_sqlite_schema",
+      "query": "I am modifying persistence and need a map of the SQLite tables used for graph memory and embeddings.",
+      "highly_relevant": [
+        "component:component.sqlite_schema",
+        "flow:flow.sqlite_persistence",
+        "claim:claim.sqlite_schema_tables"
+      ],
+      "relevant": [
+        "component:component.sqlite_repository",
+        "component:component.sqlite_database"
+      ],
+      "weakly_relevant": [
+        "component:component.graph_schema"
+      ]
+    },
+    {
+      "id": "q15_database_home",
+      "query": "I am making eval scripts isolate their local database and need to understand how package eval entrypoints, runners, and ENGINEERING_CONTEXT_HOME fit together.",
+      "highly_relevant": [
+        "flow:flow.local_database_isolation",
+        "claim:claim.database_path_uses_engineering_context_home",
+        "claim:claim.package_eval_scripts_invoke_isolated_eval_runners"
+      ],
+      "relevant": [
+        "component:component.sqlite_database",
+        "component:component.bootstrap_eval_runner",
+        "component:component.package_scripts"
+      ],
+      "weakly_relevant": [
+        "component:component.search_eval_fixture"
+      ]
+    },
+    {
+      "id": "q16_deterministic_ids",
+      "query": "I am investigating stable IDs and need to know which repo and scope identifiers are deterministic.",
+      "highly_relevant": [
+        "claim:claim.repo_ids_are_deterministic",
+        "claim:claim.scope_ids_are_deterministic",
+        "component:component.sqlite_repository"
+      ],
+      "relevant": [
+        "component:component.scope_model",
+        "flow:flow.sqlite_persistence"
+      ],
+      "weakly_relevant": [
+        "claim:claim.edge_ids_are_deterministic"
+      ]
+    },
+    {
+      "id": "q17_bootstrap_eval_goal",
+      "query": "I am comparing bootstrap and search evals and need to understand what the bootstrap eval is actually measuring.",
+      "highly_relevant": [
+        "component:component.bootstrap_eval_runner",
+        "component:component.bootstrap_eval_rubric",
+        "claim:claim.bootstrap_eval_is_not_search_eval"
+      ],
+      "relevant": [
+        "flow:flow.bootstrap_eval_generation",
+        "flow:flow.bootstrap_eval_judging",
+        "claim:claim.bootstrap_eval_judge_scores_nodes_edges_quality"
+      ],
+      "weakly_relevant": [
+        "component:component.search_eval_fixture"
+      ]
+    },
+    {
+      "id": "q18_bootstrap_agent_mode",
+      "query": "I am running the bootstrap eval with an agent and need to know how the runner obtains a proposal.",
+      "highly_relevant": [
+        "flow:flow.bootstrap_eval_generation",
+        "claim:claim.bootstrap_eval_accepts_fixture_or_codex",
+        "component:component.agent_runner_codex"
+      ],
+      "relevant": [
+        "component:component.bootstrap_eval_runner",
+        "claim:claim.agent_runner_spawns_codex",
+        "component:component.engineering_memory_skill"
+      ],
+      "weakly_relevant": []
+    },
+    {
+      "id": "q19_bootstrap_judge",
+      "query": "I am changing the bootstrap rubric and need to understand how judged classifications become a numeric score.",
+      "highly_relevant": [
+        "flow:flow.bootstrap_eval_judging",
+        "claim:claim.bootstrap_eval_judge_scores_nodes_edges_quality",
+        "component:component.bootstrap_eval_rubric"
+      ],
+      "relevant": [
+        "component:component.bootstrap_eval_runner",
+        "component:component.agent_runner_metrics"
+      ],
+      "weakly_relevant": [
+        "flow:flow.bootstrap_eval_generation"
+      ]
+    },
+    {
+      "id": "q20_engineering_memory_skill",
+      "query": "I am updating the engineering-memory skill and need to understand the intended bootstrap workflow it tells agents to follow.",
+      "highly_relevant": [
+        "component:component.engineering_memory_skill",
+        "flow:flow.engineering_memory_bootstrap",
+        "claim:claim.engineering_memory_skill_runs_init_and_read"
+      ],
+      "relevant": [
+        "claim:claim.engineering_memory_skill_prefers_shallow_high_signal",
+        "claim:claim.engineering_memory_skill_validates_before_apply",
+        "component:component.cli_proposal_commands"
+      ],
+      "weakly_relevant": [
+        "component:component.cli_graph_read_command"
+      ]
+    },
+    {
+      "id": "q21_package_build",
+      "query": "I am changing the build setup and need to know how the package compiles and exposes the ec command.",
+      "highly_relevant": [
+        "component:component.package_scripts",
+        "claim:claim.package_build_compiles_apps_libs_evals",
+        "claim:claim.package_exposes_ec_binary"
+      ],
+      "relevant": [
+        "component:component.cli_app"
+      ],
+      "weakly_relevant": [
+        "component:component.bootstrap_eval_runner"
+      ]
+    },
+    {
+      "id": "q22_search_eval_design",
+      "query": "I am building the search benchmark and need to understand why it uses a deep fixture instead of bootstrap output.",
+      "highly_relevant": [
+        "component:component.search_eval_fixture",
+        "claim:claim.search_eval_uses_deep_fixture",
+        "claim:claim.bootstrap_eval_is_not_search_eval"
+      ],
+      "relevant": [
+        "flow:flow.search_eval_retrieval",
+        "claim:claim.search_eval_queries_are_task_sentences"
+      ],
+      "weakly_relevant": [
+        "component:component.bootstrap_eval_runner"
+      ]
+    },
+    {
+      "id": "q23_search_eval_metrics",
+      "query": "I am implementing search scoring and need to know which retrieval metrics the benchmark should report.",
+      "highly_relevant": [
+        "claim:claim.search_eval_uses_graded_relevance",
+        "component:component.search_eval_fixture",
+        "flow:flow.search_eval_retrieval"
+      ],
+      "relevant": [
+        "claim:claim.search_eval_queries_are_task_sentences"
+      ],
+      "weakly_relevant": [
+        "component:component.bootstrap_eval_rubric"
+      ]
+    },
+    {
+      "id": "q24_agent_runner",
+      "query": "I am debugging Codex-based eval generation and need to find where the agent process is launched and measured.",
+      "highly_relevant": [
+        "component:component.agent_runner_codex",
+        "claim:claim.agent_runner_spawns_codex",
+        "component:component.agent_runner_metrics"
+      ],
+      "relevant": [
+        "claim:claim.agent_runner_writes_metrics",
+        "flow:flow.bootstrap_eval_generation",
+        "component:component.bootstrap_eval_runner"
+      ],
+      "weakly_relevant": []
+    },
+    {
+      "id": "q25_proposal_validate_command",
+      "query": "I am changing proposal validate CLI behavior and need to understand how validation is invoked from the command line.",
+      "highly_relevant": [
+        "component:component.cli_proposal_commands",
+        "flow:flow.proposal_validation",
+        "component:component.proposal_validation"
+      ],
+      "relevant": [
+        "component:component.knowledge_graph_service",
+        "claim:claim.validation_requires_title_and_creates",
+        "claim:claim.cli_is_thin_service_wrapper"
+      ],
+      "weakly_relevant": [
+        "component:component.proposal_model"
+      ]
+    },
+    {
+      "id": "q26_proposal_apply_command",
+      "query": "I am changing proposal apply CLI behavior and need to know what counts and identifiers are printed after apply.",
+      "highly_relevant": [
+        "component:component.cli_proposal_commands",
+        "flow:flow.proposal_apply",
+        "claim:claim.apply_prints_commit_scope_and_counts"
+      ],
+      "relevant": [
+        "component:component.knowledge_graph_service",
+        "claim:claim.apply_validates_before_writing",
+        "component:component.sqlite_repository",
+        "component:component.memory_commit_model"
+      ],
+      "weakly_relevant": []
+    },
+    {
+      "id": "q27_membership_model",
+      "query": "I am changing graph memberships and need to understand how graph subjects are attached to scopes.",
+      "highly_relevant": [
+        "claim:claim.memberships_attach_graph_subjects",
+        "component:component.scope_model",
+        "component:component.sqlite_repository"
+      ],
+      "relevant": [
+        "component:component.sqlite_schema",
+        "flow:flow.sqlite_persistence",
+        "claim:claim.active_view_uses_main_and_working",
+        "flow:flow.active_graph_view"
+      ],
+      "weakly_relevant": [
+        "component:component.graph_schema",
+        "component:component.active_graph_view"
+      ]
+    },
+    {
+      "id": "q28_normalization_dedupe",
+      "query": "I am investigating duplicate generated edges and need to know how normalization deduplicates relationships.",
+      "highly_relevant": [
+        "component:component.proposal_normalization",
+        "claim:claim.normalization_dedupes_edges",
+        "claim:claim.edge_ids_are_deterministic"
+      ],
+      "relevant": [
+        "flow:flow.compact_relationships_to_edges",
+        "component:component.edge_rules"
+      ],
+      "weakly_relevant": [
+        "component:component.proposal_validation"
+      ]
+    },
+    {
+      "id": "q29_context_ranking_signals",
+      "query": "I am tuning graph context ranking and need to understand how semantic, BM25, and exact signals are combined.",
+      "highly_relevant": [
+        "claim:claim.context_combines_semantic_bm25_exact",
+        "claim:claim.context_retrieves_claims",
+        "component:component.graph_context_retrieval"
+      ],
+      "relevant": [
+        "flow:flow.graph_context",
+        "claim:claim.context_derives_components_from_claims",
+        "claim:claim.context_derives_flows_from_claims"
+      ],
+      "weakly_relevant": [
+        "component:component.search_eval_fixture"
+      ]
+    },
+    {
+      "id": "q30_no_clone_search_eval",
+      "query": "I am making the search eval run on the current workspace and need to understand why it does not clone a target repository.",
+      "highly_relevant": [
+        "component:component.search_eval_fixture",
+        "claim:claim.search_eval_uses_deep_fixture",
+        "flow:flow.search_eval_retrieval"
+      ],
+      "relevant": [
+        "claim:claim.bootstrap_eval_is_not_search_eval",
+        "flow:flow.local_database_isolation"
+      ],
+      "weakly_relevant": [
+        "component:component.bootstrap_eval_runner"
+      ]
+    },
+    {
+      "id": "q31_new_edge_kind_impact",
+      "query": "I am adding a new graph edge kind and need to understand which relationship syntax, validation rules, and schema concepts could break.",
+      "highly_relevant": [
+        "component:component.edge_rules",
+        "component:component.proposal_validation",
+        "flow:flow.edge_validation"
+      ],
+      "relevant": [
+        "component:component.proposal_model",
+        "component:component.proposal_normalization",
+        "flow:flow.compact_relationships_to_edges",
+        "claim:claim.validation_checks_edge_references",
+        "component:component.graph_schema"
+      ],
+      "weakly_relevant": [
+        "claim:claim.edge_about_direction",
+        "claim:claim.edge_contains_direction",
+        "claim:claim.edge_touches_direction"
+      ]
+    },
+    {
+      "id": "q32_applied_object_missing_from_read",
+      "query": "A proposal applies successfully but the new graph object is missing from graph read output, and I need to understand the write, membership, and active-view filter path.",
+      "highly_relevant": [
+        "flow:flow.proposal_apply",
+        "claim:claim.memberships_attach_graph_subjects",
+        "component:component.active_graph_view"
+      ],
+      "relevant": [
+        "component:component.sqlite_repository",
+        "flow:flow.active_graph_view",
+        "claim:claim.active_view_filters_edges_to_active_endpoints",
+        "flow:flow.graph_read",
+        "component:component.scope_model"
+      ],
+      "weakly_relevant": [
+        "claim:claim.memory_commits_chain_with_parent",
+        "component:component.memory_commit_model"
+      ]
+    },
+    {
+      "id": "q33_parent_context_from_command_child",
+      "query": "Graph context finds a specific CLI command but misses the parent CLI surface, and I need to understand which hierarchy and dispatch relationships connect them.",
+      "highly_relevant": [
+        "component:component.cli_app",
+        "claim:claim.cli_app_contains_command_components",
+        "flow:flow.cli_command_dispatch"
+      ],
+      "relevant": [
+        "component:component.cli_graph_context_command",
+        "component:component.cli_graph_read_command",
+        "component:component.cli_proposal_commands",
+        "claim:claim.cli_is_thin_service_wrapper"
+      ],
+      "weakly_relevant": [
+        "component:component.knowledge_graph_service"
+      ]
+    },
+    {
+      "id": "q34_eval_state_leak_debugging",
+      "query": "Eval state is leaking between runs and I need to understand which eval runner, package entrypoint, environment variable, and SQLite database pieces control isolation.",
+      "highly_relevant": [
+        "flow:flow.local_database_isolation",
+        "claim:claim.package_eval_scripts_invoke_isolated_eval_runners",
+        "claim:claim.database_path_uses_engineering_context_home"
+      ],
+      "relevant": [
+        "component:component.bootstrap_eval_runner",
+        "component:component.search_eval_fixture",
+        "component:component.sqlite_database",
+        "component:component.package_scripts"
+      ],
+      "weakly_relevant": [
+        "component:component.sqlite_schema",
+        "flow:flow.sqlite_persistence"
+      ]
+    }
+  ]
+}
