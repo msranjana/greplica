@@ -141,6 +141,9 @@ greplica install --platform codex --embedding local
 
 # OpenCode
 greplica install --platform opencode --embedding local
+
+# OpenHands
+greplica install --platform openhands --embedding local
 ```
 
 This copies the Greplica agent skills, configures local embeddings (no API key needed), and initializes the memory database.
@@ -219,7 +222,7 @@ Switch at any time by rerunning `greplica install` with the new flag.
 ## Commands
 
 ```bash
-greplica install --platform codex|claude|opencode --embedding local|openai
+greplica install --platform codex|claude|opencode|openhands --embedding local|openai
 greplica config
 greplica doctor [--check-embeddings]
 greplica graph read
@@ -238,6 +241,8 @@ greplica proposal apply <proposal.json>
 - `greplica transcript bundle` - converts one or more Codex or Claude Code JSONL transcripts into a sanitized Markdown bundle for `greplica-fast-session-bootstrap`.
 - `greplica doctor` - verifies installation and diagnoses embedding configuration failures. Not a required preflight before every command.
 - `greplica install` prepares repo memory state; normal repo commands require install first.
+
+For **OpenHands**, install is repo-local: skills are written to `.agents/skills/` and the `UserPromptSubmit`/`Stop` hooks to `.openhands/hooks.json` (Claude/Codex install to the agent's home config instead). The hooks inject `graph context` guidance and trigger background working-memory updates the same way; OpenHands must trust the repo hooks for the background save to run.
 
 ---
 
